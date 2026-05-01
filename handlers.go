@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"log"
+	// "log"
 
 	"boot.dev/linko/internal/store"
 	"golang.org/x/crypto/bcrypt"
@@ -46,13 +46,13 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing url parameter", http.StatusBadRequest)
 		return
 	}
-	log.Println("Shortening URL:", longURL)
+	logger.Println("Shortening URL:", longURL)
 	u, err := url.Parse(longURL)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		http.Error(w, "invalid URL: must include scheme (http/https) and host", http.StatusBadRequest)
 		return
 	}
-	log.Printf("Parsed URL: scheme=%s, host=%s", u.Scheme, u.Host)
+	logger.Printf("Parsed URL: scheme=%s, host=%s", u.Scheme, u.Host)
 	if err := checkDestination(longURL); err != nil {
 		http.Error(w, fmt.Sprintf("invalid target URL: %v", err), http.StatusBadRequest)
 		return
@@ -62,7 +62,7 @@ func (s *server) handlerShortenLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to shorten URL", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Generated short code: %s for URL: %s", shortCode, longURL)
+	logger.Printf("Generated short code: %s for URL: %s", shortCode, longURL)
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusCreated)
 	io.WriteString(w, shortCode)
@@ -74,7 +74,7 @@ func (s *server) handlerRedirect(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, store.ErrNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 		} else {
-			log.Printf("failed to lookup URL: %v", err)
+			logger.Printf("failed to lookup URL: %v", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}
 		return
@@ -95,7 +95,7 @@ func (s *server) handlerRedirect(w http.ResponseWriter, r *http.Request) {
 func (s *server) handlerListURLs(w http.ResponseWriter, r *http.Request) {
 	codes, err := s.store.List(r.Context())
 	if err != nil {
-		log.Printf("failed to list URLs: %v", err)
+		logger.Printf("failed to list URLs: %v", err)
 		http.Error(w, "failed to list URLs", http.StatusInternalServerError)
 		return
 	}
