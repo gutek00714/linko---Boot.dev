@@ -7,7 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	// "log"
+	"log"
 
 	"boot.dev/linko/internal/store"
 )
@@ -16,6 +16,15 @@ type server struct {
 	httpServer *http.Server
 	store      store.Store
 	cancel     context.CancelFunc
+}
+
+func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+			logger.Printf("Served request: %s %s", r.Method, r.URL.Path)
+		})
+	}
 }
 
 func newServer(store store.Store, port int, cancel context.CancelFunc) *server {
@@ -30,6 +39,11 @@ func newServer(store store.Store, port int, cancel context.CancelFunc) *server {
 		httpServer: srv,
 		store:      store,
 		cancel:     cancel,
+	}
+
+	s.httpServer = &http.Server{
+    	Addr:    fmt.Sprintf(":%d", port),
+    	Handler: requestLogger(logger)(mux), // Wrap the whole mux here!
 	}
 
 	mux.HandleFunc("GET /", s.handlerIndex)
