@@ -16,6 +16,7 @@ type server struct {
 	httpServer *http.Server
 	store      store.Store
 	cancel     context.CancelFunc
+	logger	*log.Logger
 }
 
 func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
@@ -27,24 +28,25 @@ func requestLogger(logger *log.Logger) func(http.Handler) http.Handler {
 	}
 }
 
-func newServer(store store.Store, port int, cancel context.CancelFunc) *server {
+func newServer(store store.Store, port int, cancel context.CancelFunc, logger *log.Logger) *server {
 	mux := http.NewServeMux()
 
 	srv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: mux,
+    	Addr:    fmt.Sprintf(":%d", port),
+    	Handler: requestLogger(logger)(mux), 
 	}
 
 	s := &server{
 		httpServer: srv,
 		store:      store,
 		cancel:     cancel,
+		logger:		logger,
 	}
 
-	s.httpServer = &http.Server{
-    	Addr:    fmt.Sprintf(":%d", port),
-    	Handler: requestLogger(logger)(mux), // Wrap the whole mux here!
-	}
+	// s.httpServer = &http.Server{
+    // 	Addr:    fmt.Sprintf(":%d", port),
+    // 	Handler: requestLogger(logger)(mux), 
+	// }
 
 	mux.HandleFunc("GET /", s.handlerIndex)
 	mux.Handle("POST /api/login", s.authMiddleware(http.HandlerFunc(s.handlerLogin)))
@@ -59,11 +61,11 @@ func newServer(store store.Store, port int, cancel context.CancelFunc) *server {
 
 func (s *server) start() error {
 	ln, err := net.Listen("tcp", s.httpServer.Addr)
-	addr := ln.Addr().(*net.TCPAddr)
-	logger.Printf("Linko is running on http://localhost:%d", addr.Port)
 	if err != nil {
 		return err
 	}
+	addr := ln.Addr().(*net.TCPAddr)
+	s.logger.Printf("Linko is running on http://localhost:%d", addr.Port)
 	if err := s.httpServer.Serve(ln); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -71,7 +73,6 @@ func (s *server) start() error {
 }
 
 func (s *server) shutdown(ctx context.Context) error {
-	logger.Println("Linko is shutting down")
 	return s.httpServer.Shutdown(ctx)
 }
 
