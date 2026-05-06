@@ -10,6 +10,7 @@ import (
 	"time"
 	"log"
 	"io"
+	"bufio"
 
 	"boot.dev/linko/internal/store"
 )
@@ -70,7 +71,11 @@ func initializeLogger(logFile string) (*log.Logger, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %w", err)
 		}
-		multiWriter := io.MultiWriter(os.Stderr, file)
+
+		// add buffered login
+		bufferedWriter := bufio.NewWriterSize(file, 8192)
+
+		multiWriter := io.MultiWriter(os.Stderr, bufferedWriter)
 		return log.New(multiWriter, "", log.LstdFlags), nil
 	}
 	return log.New(os.Stderr, "", log.LstdFlags), nil
