@@ -76,20 +76,38 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 type closeFunc func() error
 
+type multiError interface {
+	error
+	Unwrap() []error
+}
+
+func errorAttrs(err error) []slog.Attr {
+	attrs := []slog.Attr{
+		{Key: "message", Value: slog.StringValue(err.Error())},
+	}
+	attrs = append(attrs, linkoerr.Attrs(err)...)
+	if stackErr, ok := errors.AsType[stackTracer](err); ok {
+		attrs = append(attrs, slog.Attr{
+			Key:   "stack_trace",
+			Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
+		})
+	}
+	return attrs
+}
+
 func replaceAttr(_ []string, a slog.Attr) slog.Attr {
 	if a.Value.Kind() == slog.KindAny {
 		if err, ok := a.Value.Any().(error); ok {
-			attrs := []slog.Attr{
-				{Key: "message", Value: slog.StringValue(err.Error())},
+			if multiErr, ok := errors.AsType[multiError](err); ok {
+				errs := multiErr.Unwrap()
+				var grouped []slog.Attr
+				for i, e := range errs {
+					key := fmt.Sprintf("error_%d", i+1)
+					grouped = append(grouped, slog.GroupAttrs(key, errorAttrs(e)...))
+				}
+				return slog.GroupAttrs("errors", grouped...)
 			}
-			if stackErr, ok := errors.AsType[stackTracer](err); ok {
-				attrs = append(attrs, slog.Attr{
-					Key:   "stack_trace",
-					Value: slog.StringValue(fmt.Sprintf("%+v", stackErr.StackTrace())),
-				})
-			}
-			attrs = append(attrs, linkoerr.Attrs(err)...)
-			return slog.GroupAttrs("error", attrs...)
+			return slog.GroupAttrs("error", errorAttrs(err)...)
 		}
 	}
 	return a
