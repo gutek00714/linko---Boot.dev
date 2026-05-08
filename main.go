@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"boot.dev/linko/internal/store"
+	pkgerr "github.com/pkg/errors"
 )
 
 
@@ -68,9 +69,24 @@ func run(ctx context.Context, cancel context.CancelFunc, httpPort int, dataDir s
 
 type closeFunc func() error
 
+func replaceAttr(_ []string, a slog.Attr) slog.Attr {
+	if a.Value.Kind() == slog.KindAny {
+		if err, ok := a.Value.Any().(error); ok {
+			type stackTracer interface {
+				StackTrace() pkgerr.StackTrace
+			}
+			if st, ok := err.(stackTracer); ok {
+				return slog.String(a.Key, fmt.Sprintf("%s\n%+v", err.Error(), st.StackTrace()))
+			}
+		}
+	}
+	return a
+}
+
 func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 	stderrHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level:       slog.LevelDebug,
+		ReplaceAttr: replaceAttr,
 	})
 
 	if logFile != "" {
@@ -82,7 +98,8 @@ func initializeLogger(logFile string) (*slog.Logger, closeFunc, error) {
 		bufferedWriter := bufio.NewWriterSize(file, 8192)
 
 		fileHandler := slog.NewJSONHandler(bufferedWriter, &slog.HandlerOptions{
-			Level: slog.LevelInfo,
+			Level:       slog.LevelInfo,
+			ReplaceAttr: replaceAttr,
 		})
 
 		closeFn := func() error {
