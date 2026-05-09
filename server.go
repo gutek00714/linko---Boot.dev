@@ -51,9 +51,17 @@ func (s *spyResponseWriter) Write(b []byte) (int, error) {
 
 type LogContext struct {
 	Username string
+	Error    error
 }
 
 const LogContextKey contextKey = "log_context"
+
+func httpError(ctx context.Context, w http.ResponseWriter, statusCode int, err error) {
+	if logCtx, ok := ctx.Value(LogContextKey).(*LogContext); ok {
+		logCtx.Error = err
+	}
+	http.Error(w, err.Error(), statusCode)
+}
 
 func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -76,6 +84,9 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			}
 			if logCtx.Username != "" {
 				attrs = append(attrs, "user", logCtx.Username)
+			}
+			if logCtx.Error != nil {
+				attrs = append(attrs, "error", logCtx.Error)
 			}
 			logger.Info("Served request", attrs...)
 		})
