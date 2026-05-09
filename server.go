@@ -49,6 +49,12 @@ func (s *spyResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+type LogContext struct {
+	Username string
+}
+
+const LogContextKey contextKey = "log_context"
+
 func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,8 +62,10 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 			spyBody := &spyReadCloser{ReadCloser: r.Body}
 			r.Body = spyBody
 			spyW := &spyResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+			logCtx := &LogContext{}
+			r = r.WithContext(context.WithValue(r.Context(), LogContextKey, logCtx))
 			next.ServeHTTP(spyW, r)
-			logger.Info("Served request",
+			attrs := []any{
 				"method", r.Method,
 				"path", r.URL.Path,
 				"client_ip", r.RemoteAddr,
@@ -65,7 +73,11 @@ func requestLogger(logger *slog.Logger) func(http.Handler) http.Handler {
 				"request_body_bytes", spyBody.bytesRead,
 				"response_status", spyW.statusCode,
 				"response_body_bytes", spyW.bytesWritten,
-			)
+			}
+			if logCtx.Username != "" {
+				attrs = append(attrs, "user", logCtx.Username)
+			}
+			logger.Info("Served request", attrs...)
 		})
 	}
 }
